@@ -1,29 +1,66 @@
-import scrapy
 import logging
 from tutorial.items import Boxoffice, Artist,Tour
 import re
 from scrapy.http import Request, FormRequest
-from scrapy.spider import BaseSpider
+from scrapy.spiders.crawl import CrawlSpider
+from scrapy.spiders import Rule
+from scrapy.utils.spider import iterate_spider_output
+from scrapy.linkextractors import LinkExtractor
 
 
-class PollSpider(scrapy.Spider):
-
+class PollSpider(CrawlSpider):
     name = 'poll'
-    allowed_domains = ['http://www.pollstarpro.com/']
+    allowed_domains = ['pollstarpro.com']
+    start_urls=[
+        "http://www.pollstarpro.com/search.aspx?ArticleID=35&id=home"
+    ]
+    rules = [
+        Rule(LinkExtractor(allow_domains=['pollstarpro.com'], unique=True),
+             follow=True, callback='parse_test'
+        )
+    ]
+
+    def parse_test(self,response):
+        logging.info("@@@@@ parse_test is called @@@@@")
 
     def start_requests(self):
-        logging.info("@@@@@@@@request is called @@@@@")
-        yield FormRequest(url="https://www.pollstarpro.com/controls/content/mainLoginHandler.aspx",
+        logging.info("@@@@@ start_requests is called @@@@@")
+        self._postinit_reqs = super(PollSpider, self).start_requests()
+        return iterate_spider_output(self.login())
+
+    def login(self):
+        logging.info("@@@@@ login is called @@@@@")
+        return FormRequest(url="https://www.pollstarpro.com/controls/content/mainLoginHandler.aspx",
                     formdata={'ctl16$userNameText': 'demo', 'ctl16$passwordText': 'sxsw2016'},
-                    callback=self.post_after)
+                    callback=self.logged_in, dont_filter=True)
 
-    def post_after(self,response):
-        logging.info("@@@@@ post_after is called @@@@@")
-        yield Request(url="http://www.pollstarpro.com/search.aspx?ArticleID=35&id=home"
-                      ,callback=self.parse,dont_filter=True)
+    def logged_in(self, response):
+        logging.info("@@@@@ logged_in is called @@@@@")
+        if "Hello, Demo" in response.body:
+            logging.info("@@@@@ Login Success! @@@@@")
+            return self.initialized()
+        else:
+            logging.info("@@@@@ Login Fail.. @@@@@")
 
-    def parse(self, response):
-        logging.info("@@@@@@@@parse is called @@@@@@")
+    def initialized(self, response=None):
+        logging.info("@@@@@ initialized is called @@@@@")
+        for url in self.start_urls:
+            yield Request(url=url,callback=self.parse_item,dont_filter=True)
+
+  #  def start_requests(self):
+  #      logging.info("@@@@@@@@request is called @@@@@")
+  #      yield FormRequest(url="https://www.pollstarpro.com/controls/content/mainLoginHandler.aspx",
+  #                  formdata={'ctl16$userNameText': 'demo', 'ctl16$passwordText': 'sxsw2016'},
+  #                  callback=self.post_after)
+
+  #  def post_after(self,response):
+  #      logging.info("@@@@@ post_after is called @@@@@")
+  #      yield Request(url="http://www.pollstarpro.com/search.aspx?ArticleID=35&id=home"
+  #                    ,callback=self.parse,dont_filter=True)
+
+
+    def parse_item(self, response):
+        logging.info("@@@@@@@@parse_item is called @@@@@@")
         table=response.xpath('//table[@class="datatable"]')
         tr=table.xpath('.//tr')[1:]
         for sel in tr:
@@ -51,7 +88,7 @@ class PollSpider(scrapy.Spider):
             item['artist']=temp3
             urlt = row_items[1].xpath('./a/@href').extract()[0]
 
-            yield Request(url=urlt, callback=self.artist_page_parse, dont_filter=True)
+            #yield Request(url=urlt, callback=self.artist_page_parse, dont_filter=True)
 
             str=row_items[1].xpath('./div/a/text()').extract()
             for arr in str:
@@ -213,5 +250,3 @@ class PollSpider(scrapy.Spider):
 #            item['desc'] = sel.xpath('text()').extract()
 #            yield item
 
- 
-            
