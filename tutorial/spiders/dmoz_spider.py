@@ -18,7 +18,7 @@ class PollSpider(scrapy.Spider):
                     callback=self.post_after)
 
     def post_after(self,response):
-        logging.info("@@@@@ post_after is called @@@@@")
+        logging.info("@@@@@ post_after is called ")
         yield Request(url="http://www.pollstarpro.com/search.aspx?ArticleID=35&id=home"
                       ,callback=self.parse,dont_filter=True)
 
