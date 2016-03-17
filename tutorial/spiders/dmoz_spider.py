@@ -19,15 +19,13 @@ class PollSpider(scrapy.Spider):
 
     def post_after(self,response):
         logging.info("@@@@@ post_after is called @@@@@")
+        logging.info("@@@@@@@@parse is called @@@@@@")
+
         yield Request(url="http://www.pollstarpro.com/search.aspx?ArticleID=35&id=home"
                       ,callback=self.parse,dont_filter=True)
 
     def parse(self, response):
         logging.info("@@@@@@@@parse is called @@@@@@")
-        logging.info("@@@@@@@@parse is called @@@@@@")
-
-        logging.info("@@@@@@@@parse is called @@@@@@")
-
         table=response.xpath('//table[@class="datatable"]')
         tr=table.xpath('.//tr')[1:]
         for sel in tr:
