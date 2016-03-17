@@ -15,13 +15,13 @@ class PollSpider(CrawlSpider):
         "http://www.pollstarpro.com/search.aspx?ArticleID=35&id=home"
     ]
     rules = [
-        Rule(LinkExtractor(allow_domains=['pollstarpro.com'], unique=True),
-             follow=True, callback='parse_test'
+        Rule(LinkExtractor(allow=(r'http\:\/\/www\.pollstarpro\.com\/search\.aspx\?ArticleID=\d{1,}&id=research&ArtistID=\d{1,}&ScienceArtistID=\d{1,}'),allow_domains=['pollstarpro.com'], unique=True),
+             follow=True, callback='artist_page_parse'
+        ),
+        Rule(LinkExtractor(allow=(r'http\:\/\/www\.pollstarpro\.com\/search\.aspx\?ArticleID=\d{1,}&id=research&VenueID=\d{1,}&ScienceID=\d{1,}'),allow_domains=['pollstarpro.com'], unique=True),
+             follow=True, callback='venue_page_parse'
         )
     ]
-
-    def parse_test(self,response):
-        logging.info("@@@@@ parse_test is called @@@@@")
 
     def start_requests(self):
         logging.info("@@@@@ start_requests is called @@@@@")
@@ -31,8 +31,7 @@ class PollSpider(CrawlSpider):
     def login(self):
         logging.info("@@@@@ login is called @@@@@")
         return FormRequest(url="https://www.pollstarpro.com/controls/content/mainLoginHandler.aspx",
-                    formdata={'ctl16$userNameText': 'demo', 'ctl16$passwordText': 'sxsw2016'},
-                    callback=self.logged_in, dont_filter=True)
+                    formdata={'ctl16$userNameText': 'demo', 'ctl16$passwordText': 'sxsw2016'},callback=self.logged_in)
 
     def logged_in(self, response):
         logging.info("@@@@@ logged_in is called @@@@@")
@@ -45,7 +44,7 @@ class PollSpider(CrawlSpider):
     def initialized(self, response=None):
         logging.info("@@@@@ initialized is called @@@@@")
         for url in self.start_urls:
-            yield Request(url=url,callback=self.parse_item,dont_filter=True)
+            yield Request(url=url)
 
   #  def start_requests(self):
   #      logging.info("@@@@@@@@request is called @@@@@")
@@ -118,6 +117,8 @@ class PollSpider(CrawlSpider):
                 item['money']=temp
             yield item
 
+        self.initialized(self)
+
     def artist_page_parse(self, response):
         logging.info("@@@@@ artist_page_parse is called @@@@@")
 
@@ -128,6 +129,75 @@ class PollSpider(CrawlSpider):
                     callback=self.artist_page_parse,dont_filter=True)
         elif "Show More" in response.xpath('//a[@id="ctl10_ctl01_lbShowAllArtistRB"]/text()').extract():
             logging.info("@@@@@ Second Show More @@@@@")
+            yield FormRequest.from_response(response,formname="form1",
+                    formdata={'__EVENTTARGET': 'ctl10$ctl01$lbShowAllArtistRB', '__EVENTARGUMENT': ''},
+                    callback=self.artist_page_parse,dont_filter=True)
+
+        else:
+            logging.info("@@@@@ PASS @@@@@")
+
+            item = Artist()
+
+            name = response.xpath('//div[@class="pageSubHeader"]/h3/span/text()').extract()
+            logging.info(name)
+            item['name'] = name
+
+            div = response.xpath('//div[@id="pod-artistQuickBytes"]')
+            table = div.xpath('.//table')
+            tr = table[0].xpath('.//tr')
+            td = tr[0].xpath('.//td')
+            item['genre'] = td[1].xpath('./div/span/text()').extract()
+            td = tr[1].xpath('.//td')
+            item['headlineshows'] = td[1].xpath('./div/span/text()').extract()
+            td = tr[2].xpath('.//td')
+            item['cobillshows'] = td[1].xpath('./div/span/text()').extract()
+            tr = table[2].xpath('.//tr')
+            td = tr[0].xpath('.//td')
+            item['totalheadlinerpts'] = td[1].xpath('./div/span/text()').extract()
+            td = tr[1].xpath('.//td')
+            item['avgticketsold'] = td[1].xpath('./div/span/text()').extract()
+            tr = table[3].xpath('.//tr')
+            td = tr[0].xpath('.//td')
+            item['avggross'] = td[1].xpath('./div/span/text()').extract()
+
+            tour = Tour()
+
+            table = response.xpath('//table[@class="datatable"]')
+            for ta in table:
+                tr = ta.xpath('.//tr')[1:]
+                for seltr in tr:
+                    tdlist = seltr.xpath('.//td')
+
+                    str = re.sub(r'\D',"",tdlist[0].xpath('./span/text()').extract()[0])
+                    temp2 = []
+                    if "50" < str[4:]:
+                        temp2.append("19" + str[4:]+str[0:2]+str[2:4])
+                    else:
+                        temp2.append("20" + str[4:] + str[0:2] + str[2:4])
+                    tour['date']=temp2
+
+                    tour['venue'] = re.sub(r'\r|\n|\t',"",tdlist[2].xpath('./a/text()').extract()[0])
+                    tour['city'] = re.sub(r'\r|\n|\t',"",tdlist[3].xpath('./a/text()').extract()[0])
+                    tdlist[4].xpath('./img/@src')
+                    logging.info(tdlist[4].xpath('./img/@src'))
+                    if tdlist[4].xpath('./img/@src'):
+                        tour['boxoffice'] = 1
+                    else:
+                        tour['boxoffice'] = 0
+                    tour['artist'] = name
+                    yield tour
+            yield item
+
+    def venue_page_parse(self,response):
+        logging.info("@@@@@ venue_page_parse is called @@@@@")
+
+        if "Show More" in response.xpath('//a[@id="ctl10_ctl01_lbShowAllVenueTH"]/text()').extract():
+            logging.info("@@@@@ Venue First Show More @@@@@")
+            yield FormRequest.from_response(response,formname="form1",
+                    formdata={'__EVENTTARGET': 'ctl10$ctl01$lbShowAllArtistTH', '__EVENTARGUMENT': ''},
+                    callback=self.artist_page_parse,dont_filter=True)
+        elif "Show More" in response.xpath('//a[@id="ctl10_ctl01_lbShowAllVenueRB"]/text()').extract():
+            logging.info("@@@@@ Venue Second Show More @@@@@")
             yield FormRequest.from_response(response,formname="form1",
                     formdata={'__EVENTTARGET': 'ctl10$ctl01$lbShowAllArtistRB', '__EVENTARGUMENT': ''},
                     callback=self.artist_page_parse,dont_filter=True)
