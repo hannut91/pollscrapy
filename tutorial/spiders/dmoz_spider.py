@@ -1,5 +1,5 @@
 import logging
-from tutorial.items import Boxoffice, Artist,Tour
+from tutorial.items import Boxoffice, Artist,Tour,Venue, City
 import re
 from scrapy.http import Request, FormRequest
 from scrapy.spiders.crawl import CrawlSpider
@@ -20,7 +20,15 @@ class PollSpider(CrawlSpider):
         ),
         Rule(LinkExtractor(allow=(r'http\:\/\/www\.pollstarpro\.com\/search\.aspx\?ArticleID=\d{1,}&id=research&VenueID=\d{1,}&ScienceID=\d{1,}'),allow_domains=['pollstarpro.com'], unique=True),
              follow=True, callback='venue_page_parse'
+        ),
+        Rule(LinkExtractor(allow=(r'http\:\/\/www\.pollstarpro\.com\/search\.aspx\?ArticleID=\d{1,}&ScienceID=\d{1,}&VenueID=\d{1,}&id=research'),allow_domains=['pollstarpro.com'], unique=True),
+             follow=True, callback='venue_page_parse'
+        ),
+        Rule(LinkExtractor(allow=(r'http\:\/\/www\.pollstarpro\.com\/search\.aspx\?ArticleID=\d{1,}&id=research&CityID=\d{1,}'),allow_domains=['pollstarpro.com'], unique=True),
+             follow=True, callback='city_page_parse'
         )
+
+
     ]
 
     def start_requests(self):
@@ -121,6 +129,9 @@ class PollSpider(CrawlSpider):
 
     def artist_page_parse(self, response):
         logging.info("@@@@@ artist_page_parse is called @@@@@")
+        if response.url == "http://www.pollstarpro.com/opencontent.aspx?ArticleID=14194&id=home":
+            logging.info("@@@@@ Link follow failed @@@@@")
+            return
 
         if "Show More" in response.xpath('//a[@id="ctl10_ctl01_lbShowAllArtistTH"]/text()').extract():
             logging.info("@@@@@ First Show More @@@@@")
@@ -134,12 +145,11 @@ class PollSpider(CrawlSpider):
                     callback=self.artist_page_parse,dont_filter=True)
 
         else:
-            logging.info("@@@@@ PASS @@@@@")
-
+            logging.info("@@@@@ artist_page_parse PASS @@@@@")
+            logging.info(response.url)
             item = Artist()
 
             name = response.xpath('//div[@class="pageSubHeader"]/h3/span/text()').extract()
-            logging.info(name)
             item['name'] = name
 
             div = response.xpath('//div[@id="pod-artistQuickBytes"]')
@@ -179,7 +189,6 @@ class PollSpider(CrawlSpider):
                     tour['venue'] = re.sub(r'\r|\n|\t',"",tdlist[2].xpath('./a/text()').extract()[0])
                     tour['city'] = re.sub(r'\r|\n|\t',"",tdlist[3].xpath('./a/text()').extract()[0])
                     tdlist[4].xpath('./img/@src')
-                    logging.info(tdlist[4].xpath('./img/@src'))
                     if tdlist[4].xpath('./img/@src'):
                         tour['boxoffice'] = 1
                     else:
@@ -191,53 +200,46 @@ class PollSpider(CrawlSpider):
     def venue_page_parse(self,response):
         logging.info("@@@@@ venue_page_parse is called @@@@@")
 
+        if response.url == "http://www.pollstarpro.com/opencontent.aspx?ArticleID=14194&id=home":
+            logging.info("@@@@@ Link follow failed @@@@@")
+            return
+
         if "Show More" in response.xpath('//a[@id="ctl10_ctl01_lbShowAllVenueTH"]/text()').extract():
             logging.info("@@@@@ Venue First Show More @@@@@")
             yield FormRequest.from_response(response,formname="form1",
-                    formdata={'__EVENTTARGET': 'ctl10$ctl01$lbShowAllArtistTH', '__EVENTARGUMENT': ''},
-                    callback=self.artist_page_parse,dont_filter=True)
+                    formdata={'__EVENTTARGET': 'ctl10$ctl01$lbShowAllVenueTH', '__EVENTARGUMENT': ''},
+                    callback=self.venue_page_parse,dont_filter=True)
         elif "Show More" in response.xpath('//a[@id="ctl10_ctl01_lbShowAllVenueRB"]/text()').extract():
             logging.info("@@@@@ Venue Second Show More @@@@@")
             yield FormRequest.from_response(response,formname="form1",
-                    formdata={'__EVENTTARGET': 'ctl10$ctl01$lbShowAllArtistRB', '__EVENTARGUMENT': ''},
-                    callback=self.artist_page_parse,dont_filter=True)
+                    formdata={'__EVENTTARGET': 'ctl10$ctl01$lbShowAllVenueRB', '__EVENTARGUMENT': ''},
+                    callback=self.venue_page_parse,dont_filter=True)
 
         else:
-            logging.info("@@@@@ PASS @@@@@")
+            logging.info("@@@@@ venue_page_parse PASS @@@@@")
+            logging.info(response.url)
+            venue = Venue()
 
-            item = Artist()
+            name = response.xpath('//span[@id="ctl10_ctl01_lblVenueName"]/text()').extract()
+            venue['name'] = name
 
-            name = response.xpath('//div[@class="pageSubHeader"]/h3/span/text()').extract()
-            logging.info(name)
-            item['name'] = name
+            temp =  response.xpath('//span[@id="ctl10_ctl01_lblBO1"]/text()').extract()[0]
+            venue['avgsold'] = re.sub(r'\,',"",temp)
 
-            div = response.xpath('//div[@id="pod-artistQuickBytes"]')
-            table = div.xpath('.//table')
-            tr = table[0].xpath('.//tr')
-            td = tr[0].xpath('.//td')
-            item['genre'] = td[1].xpath('./div/span/text()').extract()
-            td = tr[1].xpath('.//td')
-            item['headlineshows'] = td[1].xpath('./div/span/text()').extract()
-            td = tr[2].xpath('.//td')
-            item['cobillshows'] = td[1].xpath('./div/span/text()').extract()
-            tr = table[2].xpath('.//tr')
-            td = tr[0].xpath('.//td')
-            item['totalheadlinerpts'] = td[1].xpath('./div/span/text()').extract()
-            td = tr[1].xpath('.//td')
-            item['avgticketsold'] = td[1].xpath('./div/span/text()').extract()
-            tr = table[3].xpath('.//tr')
-            td = tr[0].xpath('.//td')
-            item['avggross'] = td[1].xpath('./div/span/text()').extract()
+            temp =  response.xpath('//span[@id="ctl10_ctl01_lblBO2"]/text()').extract()[0]
+            venue['avggross'] = re.sub(r'\,|\$',"",temp)
+
+            city =  response.xpath('//a[@id="ctl10_ctl01_hlCityID"]/text()').extract()
+            venue['city'] = city
 
             tour = Tour()
-
             table = response.xpath('//table[@class="datatable"]')
             for ta in table:
                 tr = ta.xpath('.//tr')[1:]
                 for seltr in tr:
+                    seltr.xpath('./td/text()').extract()
                     tdlist = seltr.xpath('.//td')
-
-                    str = re.sub(r'\D',"",tdlist[0].xpath('./span/text()').extract()[0])
+                    str = re.sub(r'\D',"",tdlist.xpath('./text()').extract()[0])
                     temp2 = []
                     if "50" < str[4:]:
                         temp2.append("19" + str[4:]+str[0:2]+str[2:4])
@@ -245,17 +247,65 @@ class PollSpider(CrawlSpider):
                         temp2.append("20" + str[4:] + str[0:2] + str[2:4])
                     tour['date']=temp2
 
-                    tour['venue'] = re.sub(r'\r|\n|\t',"",tdlist[2].xpath('./a/text()').extract()[0])
-                    tour['city'] = re.sub(r'\r|\n|\t',"",tdlist[3].xpath('./a/text()').extract()[0])
-                    tdlist[4].xpath('./img/@src')
-                    logging.info(tdlist[4].xpath('./img/@src'))
-                    if tdlist[4].xpath('./img/@src'):
+                    tour['artist'] = re.sub(r'\r|\n|\t',"",tdlist[1].xpath('./a/text()').extract()[0])
+                    if tdlist[3].xpath('./img/@src'):
                         tour['boxoffice'] = 1
                     else:
                         tour['boxoffice'] = 0
-                    tour['artist'] = name
+                    tour['city'] = city
+                    tour['venue'] = name
                     yield tour
-            yield item
+            yield venue
+
+    def city_page_parse(self, response):
+        logging.info("@@@@@ city_page_parse is called @@@@@")
+
+        if response.url == "http://www.pollstarpro.com/opencontent.aspx?ArticleID=14194&id=home":
+            logging.info("@@@@@ Link follow failed @@@@@")
+            return
+
+        if "Show More" in response.xpath('//a[@id="ctl10_ctl01_showAllCityTHLinkBtn"]/text()').extract():
+            logging.info("@@@@@ City First Show More @@@@@")
+            yield FormRequest.from_response(response,formname="form1",
+                    formdata={'__EVENTTARGET': 'ctl10$ctl01$showAllCityTHLinkBtn', '__EVENTARGUMENT': ''},
+                    callback=self.city_page_parse,dont_filter=True)
+        elif "Show More" in response.xpath('//a[@id="ctl10_ctl01_showAllCityRBLinkBtn"]/text()').extract():
+            logging.info("@@@@@ City Second Show More @@@@@")
+            yield FormRequest.from_response(response,formname="form1",
+                    formdata={'__EVENTTARGET': 'ctl10$ctl01$showAllCityRBLinkBtn', '__EVENTARGUMENT': ''},
+                    callback=self.city_page_parse,dont_filter=True)
+        else:
+            logging.info("@@@@@ city_page_parse PASS @@@@@")
+
+            city = City()
+            tour = Tour()
+            name = response.xpath('//span[@id="ctl10_ctl01_cityNameLbl"]/text()').extract()
+            city['name'] = name
+
+            table = response.xpath('//table[@class="datatable"]')
+            for seltable in table:
+                tr = seltable.xpath('.//tr')[1:]
+                for seltr in tr:
+                    td = seltr.xpath('.//td')
+                    str = re.sub(r'\D',"",td[0].xpath('./span/text()').extract()[0])
+                    temp2 = []
+                    if "50" < str[4:]:
+                        temp2.append("19" + str[4:]+str[0:2]+str[2:4])
+                    else:
+                        temp2.append("20" + str[4:] + str[0:2] + str[2:4])
+                    tour['date']=temp2
+                    venue = td[1].xpath('./a/text()').extract()[0]
+                    tour['venue'] = re.sub(r'\t|\n|\r',"",venue)
+                    artist = td[2].xpath('./a/text()').extract()[0]
+                    tour['artist'] = re.sub(r'\t|\n|\r',"",artist)
+                    if td[3].xpath('./img/@src'):
+                        tour['boxoffice'] = 1
+                    else:
+                        tour['boxoffice'] = 0
+                    yield tour
+
+            yield city
+
 
 
 # yield Request(url="http://www.pollstarpro.com/search.aspx?ArticleID=35&id=home",callback=self.yoon_test)
