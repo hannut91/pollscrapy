@@ -15,7 +15,7 @@ class PollSpider(CrawlSpider):
     ]
     rules = [
         Rule(LinkExtractor(allow=(r'http\:\/\/www\.pollstarpro\.com\/search\.aspx\?ArticleID=\d{1,}&id=research&ArtistID=\d{1,}&ScienceArtistID=\d{1,}'),allow_domains=['pollstarpro.com'], unique=True),
-             follow=True, callback='artist_page_parse'
+            follow=True, callback='artist_page_parse'
         ),
         #Rule(LinkExtractor(allow=(r'http\:\/\/www\.pollstarpro\.com\/search\.aspx\?ArticleID=\d{1,}&id=research&VenueID=\d{1,}&ScienceID=\d{1,}'),allow_domains=['pollstarpro.com'], unique=True),
         #     follow=True, callback='venue_page_parse'
@@ -59,6 +59,10 @@ class PollSpider(CrawlSpider):
 
     def parse_start_url(self, response):
         logging.info("@@@@@@@@parse_start_url is called @@@@@@")
+
+        seltemp = response.xpath('//select[@name="ctl10$ctl01$cboCount1"]')
+        selopt = seltemp.xpath('.//option[@selected="selected"]/text()').extract()[0]
+
         table=response.xpath('//table[@class="datatable"]')
         tr=table.xpath('.//tr')[1:]
         for sel in tr:
@@ -125,10 +129,9 @@ class PollSpider(CrawlSpider):
         tmstr3 = ""
         tmstr4 = ""
 
-        #if response.url == "http://www.pollstarpro.com/opencontent.aspx?ArticleID=14194&id=home":
-        #    logging.info("@@@@@ Link follow failed @@@@@")
-        #    self.login()
-        #    return
+        if response.url == "http://www.pollstarpro.com/opencontent.aspx?ArticleID=14194&id=home":
+            logging.info("@@@@@ Link follow failed @@@@@")
+
         if response.xpath('//span[@id="ctl10_ctl01_lblArtistTHCount"]') :
             str = response.xpath('//span[@id="ctl10_ctl01_lblArtistTHCount"]/text()').extract()[0]
             nxstr = str.split('of',1)
@@ -157,23 +160,23 @@ class PollSpider(CrawlSpider):
             name = response.xpath('//div[@class="pageSubHeader"]/h3/span/text()').extract()
             item['name'] = name
 
-            div = response.xpath('//div[@id="pod-artistQuickBytes"]')
-            table = div.xpath('.//table')
-            tr = table[0].xpath('.//tr')
-            td = tr[0].xpath('.//td')
-            item['genre'] = td[1].xpath('./div/span/text()').extract()
-            td = tr[1].xpath('.//td')
-            item['headlineshows'] = td[1].xpath('./div/span/text()').extract()
-            td = tr[2].xpath('.//td')
-            item['cobillshows'] = td[1].xpath('./div/span/text()').extract()
-            tr = table[2].xpath('.//tr')
-            td = tr[0].xpath('.//td')
-            item['totalheadlinerpts'] = td[1].xpath('./div/span/text()').extract()
-            td = tr[1].xpath('.//td')
-            item['avgticketsold'] = td[1].xpath('./div/span/text()').extract()
-            tr = table[3].xpath('.//tr')
-            td = tr[0].xpath('.//td')
-            item['avggross'] = td[1].xpath('./div/span/text()').extract()
+            if response.xpath('//span[@id="ctl10_ctl01_lblGenre"]/text()'):
+                item['genre'] = response.xpath('//span[@id="ctl10_ctl01_lblGenre"]/text()').extract()
+            if response.xpath('//span[@id="ctl10_ctl01_lblHeadlineShows"]/text()'):
+                temp = response.xpath('//span[@id="ctl10_ctl01_lblHeadlineShows"]/text()').extract()[0]
+                item['headlineshows'] = re.sub(r'\D',"",temp)
+            if response.xpath('//span[@id="ctl10_ctl01_lblCoBillShows"]/text()'):
+                temp = response.xpath('//span[@id="ctl10_ctl01_lblCoBillShows"]/text()').extract()[0]
+                item['cobillshows'] = re.sub(r'\D',"",temp)
+            if response.xpath('//span[@id="ctl10_ctl01_lblQB1"]/text()'):
+                temp = response.xpath('//span[@id="ctl10_ctl01_lblQB1"]/text()').extract()[0]
+                item['totalheadlinerpts'] = re.sub(r'\D',"",temp)
+            if response.xpath('//span[@id="ctl10_ctl01_lblQB2"]/text()'):
+                temp = response.xpath('//span[@id="ctl10_ctl01_lblQB2"]/text()').extract()[0]
+                item['avgticketsold'] = re.sub(r'\D',"",temp)
+            if response.xpath('//span[@id="ctl10_ctl01_lblQB3"]/text()'):
+                temp = response.xpath('//span[@id="ctl10_ctl01_lblQB3"]/text()').extract()[0]
+                item['avggross'] = re.sub(r'\D',"",temp)
 
             tour = Tour()
 
@@ -192,13 +195,19 @@ class PollSpider(CrawlSpider):
                     tour['date']=temp2
 
                     tour['venue'] = re.sub(r'\t|\r|\n',"",tdlist[2].xpath('./a/text()').extract()[0])
-                    temp = tdlist[3].xpath('./a/text()').extract()
-                    for i in temp:
-                        if not i.isspace():
-                            logging.info(i)
-                            tour['city'] = re.sub(r'\t|\r|\n|\f',"",i)
-                    #tour['city'] = re.sub(r'\t|\r|\n',"",tdlist[3].xpath('./a/text()').extract()[0])
-                    tdlist[4].xpath('./img/@src')
+                    temp = tdlist[3].xpath('./a/text()').extract()[0].split(',',2)
+                    if len(temp) == 2:
+                        temp2 = re.sub(r'\s',"",temp[0])
+                        temp3 = re.sub(r'\s',"",temp[1])
+                        temp4 = temp2+", "+temp3
+                        tour['city'] = temp4
+                    elif len(temp) ==3:
+                        temp2 = re.sub(r'\s',"",temp[0])
+                        temp3 = re.sub(r'\s',"",temp[1])
+                        temp4 = re.sub(r'\s',"",temp[2])
+                        temp5 = temp2 + ", "+temp3+ ", "+temp4
+                        tour['city'] = temp5
+                    #tour['city'] = re.sub(r'\t|\n|\r',"",tdlist[3].xpath('./a/text()').extract()[0])
                     if tdlist[4].xpath('./img/@src'):
                         tour['boxoffice'] = 1
                     else:
