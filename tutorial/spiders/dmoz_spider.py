@@ -207,7 +207,6 @@ class PollSpider(CrawlSpider):
                         temp4 = re.sub(r'\s',"",temp[2])
                         temp5 = temp2 + ", "+temp3+ ", "+temp4
                         tour['city'] = temp5
-                    #tour['city'] = re.sub(r'\t|\n|\r',"",tdlist[3].xpath('./a/text()').extract()[0])
                     if tdlist[4].xpath('./img/@src'):
                         tour['boxoffice'] = 1
                     else:
@@ -354,4 +353,6 @@ class PollSpider(CrawlSpider):
                     yield tour
 
             yield city
+
+
 
